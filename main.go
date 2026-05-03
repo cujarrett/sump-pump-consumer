@@ -32,6 +32,7 @@ type app struct {
 	running          prometheus.Gauge
 	watts            prometheus.Gauge
 	lastRunTimestamp prometheus.Gauge
+	lastRunWatts     prometheus.Gauge
 
 	// runningAt is set when a running event is received; cleared on idle.
 	// Used by the watchdog to detect stuck-running state.
@@ -52,6 +53,7 @@ func (a *app) handleMessage(msg jetstream.Msg) {
 		log.Printf("sump pump running: %.1fW", p.Watts)
 		a.running.Set(1)
 		a.watts.Set(p.Watts)
+		a.lastRunWatts.Set(p.Watts)
 		a.runsTotal.Inc()
 		a.runningAt = time.Now()
 	case "home.appliance.sump-pump.idle":
@@ -127,8 +129,12 @@ func main() {
 		Name: "sump_pump_last_completed_run_timestamp_unix",
 		Help: "Unix timestamp when the most recent sump pump run completed.",
 	})
+	lastRunWatts := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "sump_pump_last_run_watts",
+		Help: "Power draw in watts of the most recent sump pump run. Latches until next run.",
+	})
 
-	reg.MustRegister(msgsProcessed, runsTotal, running, watts, lastRunTimestamp)
+	reg.MustRegister(msgsProcessed, runsTotal, running, watts, lastRunTimestamp, lastRunWatts)
 
 	// Initialize to now so restarts don't show "56 years since last run".
 	lastRunTimestamp.SetToCurrentTime()
@@ -139,6 +145,7 @@ func main() {
 		running:          running,
 		watts:            watts,
 		lastRunTimestamp: lastRunTimestamp,
+		lastRunWatts:     lastRunWatts,
 	}
 
 	nc, err := nats.Connect(natsURL)
