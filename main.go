@@ -32,6 +32,10 @@ type app struct {
 	running          prometheus.Gauge
 	watts            prometheus.Gauge
 	lastRunTimestamp prometheus.Gauge
+
+	// runningAt is set when a running event is received; cleared on idle.
+	// Used by the watchdog to detect stuck-running state.
+	runningAt time.Time
 }
 
 // handleMessage is called by the JetStream consumer goroutine for each message.
@@ -49,11 +53,13 @@ func (a *app) handleMessage(msg jetstream.Msg) {
 		a.running.Set(1)
 		a.watts.Set(p.Watts)
 		a.runsTotal.Inc()
+		a.runningAt = time.Now()
 	case "home.appliance.sump-pump.idle":
 		log.Printf("sump pump idle: %.1fW", p.Watts)
 		a.running.Set(0)
 		a.watts.Set(0)
 		a.lastRunTimestamp.SetToCurrentTime()
+		a.runningAt = time.Time{}
 	default:
 		log.Printf("unhandled subject %q", msg.Subject())
 	}
@@ -154,6 +160,23 @@ func main() {
 	defer cc.Stop()
 
 	log.Printf("sump-pump-consumer %s consuming %s/%s", version, stream, consumerName)
+
+	// Watchdog: if the pump has been in running state for more than 10 minutes
+	// with no new event (missed idle webhook), auto-reset to idle.
+	const watchdogTimeout = 10 * time.Minute
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if !a.runningAt.IsZero() && time.Since(a.runningAt) > watchdogTimeout {
+				log.Printf("watchdog: no idle event after %v, resetting to idle", watchdogTimeout)
+				a.running.Set(0)
+				a.watts.Set(0)
+				a.lastRunTimestamp.SetToCurrentTime()
+				a.runningAt = time.Time{}
+			}
+		}
+	}()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
