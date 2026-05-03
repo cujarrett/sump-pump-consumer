@@ -118,8 +118,8 @@ func main() {
 		Help: "Last reported power draw of the sump pump in watts.",
 	})
 	lastRunTimestamp := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "sump_pump_last_completed_run_timestamp_unix",
-		Help: "Unix timestamp of the most recent sump pump run start.",
+		Name: "sump_pump_last_completed_run_timestamp_unix",
+		Help: "Unix timestamp when the most recent sump pump run completed.",
 	})
 
 	reg.MustRegister(msgsProcessed, runsTotal, running, watts, lastRunTimestamp)
