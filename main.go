@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,22 +20,40 @@ import (
 // version is set at build time via -ldflags="-X main.version=x.y.z".
 var version = "dev"
 
+// natsPayload is the JSON body published by sump-pump-bridge.
+type natsPayload struct {
+	Watts float64 `json:"watts"`
+}
+
 // app holds all dependencies. Config is read once in main(); methods are on *app.
-// Annotations are handled by Grafana reading sump_pump_running from Prometheus —
-// no Grafana API calls needed here.
 type app struct {
-	msgsProcessed prometheus.Counter
+	msgsProcessed    prometheus.Counter
+	runsTotal        prometheus.Counter
+	running          prometheus.Gauge
+	watts            prometheus.Gauge
+	lastRunTimestamp prometheus.Gauge
 }
 
 // handleMessage is called by the JetStream consumer goroutine for each message.
 func (a *app) handleMessage(msg jetstream.Msg) {
 	a.msgsProcessed.Inc()
 
+	var p natsPayload
+	if err := json.Unmarshal(msg.Data(), &p); err != nil {
+		log.Printf("unmarshal %q: %v", msg.Subject(), err)
+	}
+
 	switch msg.Subject() {
 	case "home.appliance.sump-pump.running":
-		log.Printf("sump pump running: %s", msg.Data())
+		log.Printf("sump pump running: %.1fW", p.Watts)
+		a.running.Set(1)
+		a.watts.Set(p.Watts)
+		a.runsTotal.Inc()
+		a.lastRunTimestamp.SetToCurrentTime()
 	case "home.appliance.sump-pump.idle":
-		log.Printf("sump pump idle: %s", msg.Data())
+		log.Printf("sump pump idle: %.1fW", p.Watts)
+		a.running.Set(0)
+		a.watts.Set(0)
 	default:
 		log.Printf("unhandled subject %q", msg.Subject())
 	}
@@ -79,15 +98,38 @@ func main() {
 	if s := os.Getenv("NATS_STREAM"); s != "" {
 		stream = s
 	}
+
 	reg := prometheus.NewRegistry()
+
 	msgsProcessed := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "messages_processed_total",
 		Help: "Total NATS messages processed.",
 	})
-	reg.MustRegister(msgsProcessed)
+	runsTotal := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "sump_pump_runs_total",
+		Help: "Total number of sump pump run cycles observed.",
+	})
+	running := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "sump_pump_running",
+		Help: "1 if the sump pump is currently running, 0 if idle.",
+	})
+	watts := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "sump_pump_watts",
+		Help: "Last reported power draw of the sump pump in watts.",
+	})
+	lastRunTimestamp := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "sump_pump_last_run_timestamp_unix",
+		Help: "Unix timestamp of the most recent sump pump run start.",
+	})
+
+	reg.MustRegister(msgsProcessed, runsTotal, running, watts, lastRunTimestamp)
 
 	a := &app{
-		msgsProcessed: msgsProcessed,
+		msgsProcessed:    msgsProcessed,
+		runsTotal:        runsTotal,
+		running:          running,
+		watts:            watts,
+		lastRunTimestamp: lastRunTimestamp,
 	}
 
 	nc, err := nats.Connect(natsURL)
@@ -155,3 +197,4 @@ func main() {
 	<-sigCh
 	log.Println("shutting down")
 }
+
