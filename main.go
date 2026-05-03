@@ -130,6 +130,9 @@ func main() {
 
 	reg.MustRegister(msgsProcessed, runsTotal, running, watts, lastRunTimestamp)
 
+	// Initialize to now so restarts don't show "56 years since last run".
+	lastRunTimestamp.SetToCurrentTime()
+
 	a := &app{
 		msgsProcessed:    msgsProcessed,
 		runsTotal:        runsTotal,
