@@ -69,7 +69,7 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("404 %s %s %q", r.Method, r.URL.Path, r.Header.Get("User-Agent"))
+	log.Printf("404 %s %s from %s %q", r.Method, r.URL.Path, r.RemoteAddr, r.Header.Get("User-Agent"))
 	w.WriteHeader(http.StatusNotFound)
 }
 
@@ -197,4 +197,3 @@ func main() {
 	<-sigCh
 	log.Println("shutting down")
 }
-
