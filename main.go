@@ -49,11 +49,11 @@ func (a *app) handleMessage(msg jetstream.Msg) {
 		a.running.Set(1)
 		a.watts.Set(p.Watts)
 		a.runsTotal.Inc()
-		a.lastRunTimestamp.SetToCurrentTime()
 	case "home.appliance.sump-pump.idle":
 		log.Printf("sump pump idle: %.1fW", p.Watts)
 		a.running.Set(0)
 		a.watts.Set(0)
+		a.lastRunTimestamp.SetToCurrentTime()
 	default:
 		log.Printf("unhandled subject %q", msg.Subject())
 	}
@@ -118,7 +118,7 @@ func main() {
 		Help: "Last reported power draw of the sump pump in watts.",
 	})
 	lastRunTimestamp := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "sump_pump_last_run_timestamp_unix",
+			Name: "sump_pump_last_completed_run_timestamp_unix",
 		Help: "Unix timestamp of the most recent sump pump run start.",
 	})
 
