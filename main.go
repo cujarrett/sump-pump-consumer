@@ -189,7 +189,7 @@ func main() {
 	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/healthz", healthHandler)
 	mux.HandleFunc("/", notFoundHandler)
 
 	metricsMux := http.NewServeMux()
