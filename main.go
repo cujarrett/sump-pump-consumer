@@ -36,7 +36,8 @@ type app struct {
 
 	// runningAt is set when a running event is received; cleared on idle.
 	// Used by the watchdog to detect stuck-running state.
-	runningAt time.Time
+	runningAt       time.Time
+	lastRunWattsVal float64
 }
 
 // handleMessage is called by the JetStream consumer goroutine for each message.
@@ -54,10 +55,21 @@ func (a *app) handleMessage(msg jetstream.Msg) {
 		a.running.Set(1)
 		a.watts.Set(p.Watts)
 		a.lastRunWatts.Set(p.Watts)
+		a.lastRunWattsVal = p.Watts
 		a.runsTotal.Inc()
 		a.runningAt = time.Now()
 	case "home.appliance.sump-pump.idle":
 		log.Printf("sump pump idle: %.1fW", p.Watts)
+		if !a.runningAt.IsZero() {
+			duration := time.Since(a.runningAt)
+			costUSD := a.lastRunWattsVal / 1000 * 0.16 * duration.Seconds() / 3600
+			log.Printf("run_complete start=%q duration_s=%.0f watts=%.1f cost_usd=%.6f",
+				a.runningAt.UTC().Format(time.RFC3339),
+				duration.Seconds(),
+				a.lastRunWattsVal,
+				costUSD,
+			)
+		}
 		a.running.Set(0)
 		a.watts.Set(0)
 		a.lastRunTimestamp.SetToCurrentTime()
@@ -180,6 +192,14 @@ func main() {
 		for range ticker.C {
 			if !a.runningAt.IsZero() && time.Since(a.runningAt) > watchdogTimeout {
 				log.Printf("watchdog: no idle event after %v, resetting to idle", watchdogTimeout)
+				duration := time.Since(a.runningAt)
+				costUSD := a.lastRunWattsVal / 1000 * 0.16 * duration.Seconds() / 3600
+				log.Printf("run_complete start=%q duration_s=%.0f watts=%.1f cost_usd=%.6f",
+					a.runningAt.UTC().Format(time.RFC3339),
+					duration.Seconds(),
+					a.lastRunWattsVal,
+					costUSD,
+				)
 				a.running.Set(0)
 				a.watts.Set(0)
 				a.lastRunTimestamp.SetToCurrentTime()
