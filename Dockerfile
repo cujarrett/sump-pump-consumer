@@ -22,7 +22,7 @@ WORKDIR /app
 
 COPY --from=builder /app/sump-pump-consumer .
 
-# Numeric, not the name — the kubelet cannot verify runAsNonRoot for a user it
+# Numeric, not the name - the kubelet cannot verify runAsNonRoot for a user it
 # cannot resolve, and fails the container closed. Same uid the account already has.
 USER 100
 

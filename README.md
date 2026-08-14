@@ -7,14 +7,14 @@ CI builds an ARM64 image, pushes it to GHCR, then commits the new tag to the `su
 
 ### Rotating `HOMELAB_PAT`
 
-The `deploy` job authenticates to `cujarrett/homelab-workspaces` with `HOMELAB_PAT`, a repo-level Actions secret holding a fine-grained PAT. `cujarrett` is a personal account, not an org, so secrets cannot be shared — other repos define a secret by the same name holding their own token, and rotating one does not affect the others.
+The `deploy` job authenticates to `cujarrett/homelab-workspaces` with `HOMELAB_PAT`, a repo-level Actions secret holding a fine-grained PAT. `cujarrett` is a personal account, not an org, so secrets cannot be shared - other repos define a secret by the same name holding their own token, and rotating one does not affect the others.
 
 When the token expires, `deploy` fails on `Bad credentials (HTTP 401)` while `test` and `build-and-push` stay green. Images keep building and the cluster keeps running the old tag, so nothing looks broken until someone checks what is actually deployed.
 
 ```bash
 # 1. Mint a replacement at https://github.com/settings/personal-access-tokens
-#    Repository access — cujarrett/homelab-workspaces only
-#    Permissions — Contents: Read and write
+#    Repository access - cujarrett/homelab-workspaces only
+#    Permissions - Contents: Read and write
 
 # 2. Replace the secret
 print -n "Paste new token: "
